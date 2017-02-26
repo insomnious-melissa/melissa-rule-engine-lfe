@@ -6,7 +6,8 @@
 
 (defmodule rule-engine
   (export (check 1)
-          (evaluate 1)))
+          (evaluate 1)
+          (evaluate 2)))
 
 ;;; Macros
 
@@ -39,6 +40,11 @@
 (new-type quantifier)
 (new-type predicate)
 
+(new-type ctx-bool-var)
+(new-type ctx-string-var)
+(new-type ctx-integer-var)
+(new-type ctx-list-var)
+
 ;; TBD
 
 (new-type function-returns-integer)
@@ -47,9 +53,31 @@
 
 ;; Additional type functions
 
+(defun inherit?
+  (('ctx-bool-var 'predicate) 'true)
+  (('ctx-string-var 'string) 'true)
+  (('ctx-integer-var 'integer) 'true)
+  (('ctx-list-var 'list) 'true)
+  ((_some-other-type _any-base-type) 'false))
+
 (defun predicate-or-quantifier? (some-type)
   (or (predicate? some-type)
       (quantifier? some-type)))
+
+(defun of-the-same-type? (arguments)
+  (== (lists:map #'check/1 arguments)))
+
+(defun startswith (string prefix)
+  (=:= (string:str string prefix) 1))
+
+(defun ctx-get-in (variable ctx)
+  (fletrec ((get-in ((() current-map) current-map)
+                    ((path current-map)
+                     (get-in (cdr path)
+                             (maps:get (list_to_atom (car path))
+                                       current-map ())))))
+    (get-in (cdr (string:tokens (atom_to_list variable) "."))
+            ctx)))
 
 ;;; API functions
 
@@ -58,7 +86,13 @@
                             (== some-boolean 'false)))
    (type-predicate some-boolean))
   ((some-atom) (when (is_atom some-atom))
-   (type-atom some-atom))
+   (let ((atom-list (atom_to_list some-atom)))
+     (cond
+      ((startswith atom-list "ctx.bool-") (type-ctx-bool-var some-atom))
+      ((startswith atom-list "ctx.str-") (type-ctx-string-var some-atom))
+      ((startswith atom-list "ctx.int-") (type-ctx-integer-var some-atom))
+      ((startswith atom-list "ctx.list-") (type-ctx-list-var some-atom))
+      ('true (type-atom some-atom)))))
   ((some-integer) (when (is_integer some-integer)) ;; Integer
    (type-integer some-integer))
   ((some-list) (when (is_list some-list)) ;; List or String
@@ -70,8 +104,15 @@
               (check-function function params))))))
 
 (defun evaluate (expression)
+  (evaluate expression ()))
+
+(defun evaluate (expression ctx)
   (if (predicate-or-quantifier? expression)
-    (let ((transformed-expression `(quote ,(transform-expression expression))))
+    (let* ((external-functions #m(ctx-get-in #'ctx-get-in/2))
+           (transformed-expression `(quote ,(transform-expression expression
+                                                                 ctx
+                                                                 external-functions
+                                                                 ()))))
       (let ((evaluated-expression `(eval ,transformed-expression)))
         (rule-engine-log "transformed expression ~p~n" evaluated-expression)
         (eval evaluated-expression)))
@@ -80,6 +121,24 @@
 ;;; Internal functions
 
 (defun check-function
+  (('count (list list-expr)) (andalso (orelse (list? list-expr)
+                                              (string? list-expr)
+                                              (null? list-expr))
+                                      (type-integer `(count ,list-expr))))
+  (('first (list list-expr)) (andalso (orelse (list? list-expr)
+                                              (string? list-expr)
+                                              (null? list-expr))
+                                      (type-integer `(first ,list-expr))))
+  (('eq arguments) (andalso (of-the-same-type? arguments)
+                            (type-predicate `(eq ,@arguments))))
+  (('gt arguments) (andalso (of-the-same-type? arguments)
+                            (type-predicate `(gt ,@arguments))))
+  (('lt arguments) (andalso (of-the-same-type? arguments)
+                            (type-predicate `(lt ,@arguments))))
+  (('gte arguments) (andalso (of-the-same-type? arguments)
+                             (type-predicate `(gte ,@arguments))))
+  (('lte arguments) (andalso (of-the-same-type? arguments)
+                             (type-predicate `(lte ,@arguments))))
   (('in (list what where)) (andalso (or (integer? what)
                                         (string? what))
                                     (or (list? where)
@@ -99,17 +158,36 @@
                                               (type-quantifier `(any ,predicate ,arguments))))
   ((_unknown _params) 'list))
 
-
-(defun transform-expression (expression)
-  (cond
-   ((or (== expression 'true)
-        (== expression 'false))
-    `(quote ,expression))
-   ((== expression 'or) 'orelse)
-   ((== expression 'and) 'andalso)
-   ((== expression 'in) 'lists:member)
-   ((== expression 'any) 'lists:any)
-   ((== expression 'all) 'lists:all)
-   ((is_list expression)
-    (lists:map #'transform-expression/1 expression))
-   ('true expression)))
+(defun transform-expression (expression ctx external-functions outer-expression)
+  (let ((ctx-get-in (maps:get 'ctx-get-in external-functions)))
+    (cond
+     ((or (== expression 'true)
+          (== expression 'false))
+      `(quote ,expression))
+     ((== expression 'or) 'orelse)
+     ((== expression 'and) 'andalso)
+     ((== expression 'in) 'lists:member)
+     ((== expression 'any) 'lists:any)
+     ((== expression 'all) 'lists:all)
+     ((== expression 'eq) '==)
+     ((== expression 'gt) '>)
+     ((== expression 'lt) '<)
+     ((== expression 'gte) '>=)
+     ((== expression 'lte) '=<)
+     ((== expression 'count) 'length)
+     ((== expression 'first) 'car)
+     ((andalso (is_list expression)
+               (not (string? expression)))
+      (if (andalso (of-the-same-type? expression)
+                   (string? (car expression)))
+        `(quote ,expression)
+        (lists:map (lambda (inner-expression)
+                     (transform-expression inner-expression
+                                           ctx
+                                           external-functions
+                                           expression))
+                   expression)))
+     ((andalso (is_atom expression)
+               (startswith (atom_to_list expression) "ctx."))
+      (ctx-get-in expression ctx))
+     ('true expression))))
