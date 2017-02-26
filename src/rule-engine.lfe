@@ -20,7 +20,7 @@
          (type-function (list_to_atom (++ "type-" type-name)))
          (type-param (list_to_atom (++ "some-" type-name)))
          (check-function (list_to_atom (++ type-name "?"))))
-    `(progn 
+    `(progn
        (defun ,type-function (,type-param)
          (rule-engine-log "~p is of type ~p~n" ,type-param ,type-name)
          ',type)
