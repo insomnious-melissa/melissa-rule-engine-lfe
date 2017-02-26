@@ -1,0 +1,4 @@
+[{<<"lfe">>,
+  {git,"https://github.com/rvirding/lfe.git",
+       {ref,"d722d3662b191b61310dc9bba78f9a77f512b742"}},
+  0}].
