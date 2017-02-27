@@ -1,11 +1,17 @@
-rule-engine
-==========
+* rule-engine
 
-LFE Rule Engine library.
+[![LFE Versions][lfe badge]][lfe]
+[![Erlang Versions][erlang badge]][versions]
+
+*LFE Rule Engine library*
 
 Rule Engine is a small subset of LISP aimed to handle user input (S-expessions) returning true if expression evaluates to true, false if it evalues to false or nil if it cannot be evaluated.
 
 More to be done soon!
+
+## Documentation
+
+See [tests] for usage info:
 
 ## Examples
 
@@ -44,4 +50,21 @@ $ rebar3 compile
 
 ## Test
 
-Not done yet
+```
+$ rebar3 eunit
+```
+
+## License
+
+Copyright © 2017, Sergey Sobko
+
+MIT License
+
+
+[tests]: https://github.com/insomnious-melissa/melissa-rule-engine-lfe/blob/master/test/unit-rule-engine-tests.lfe
+[org]: https://github.com/insomnious-melissa
+[github]: https://github.com/insomnious-melissa/melissa-rule-engine-lfe
+[lfe]: https://github.com/rvirding/lfe
+[lfe badge]: https://img.shields.io/badge/lfe-1.2+-blue.svg
+[erlang badge]: https://img.shields.io/badge/erlang-18+-blue.svg
+[github tags]: https://github.com/insomnious-melissa/melissa-rule-engine-lfe/tags
