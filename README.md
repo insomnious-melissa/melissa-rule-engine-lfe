@@ -1,8 +1,8 @@
 rule-engine
 ==========
 
-![lfe badge]
-![erlang badge]
+[![LFE Versions][lfe badge]][lfe]
+[![Erlang Versions][erlang badge]][erlang]
 
 *LFE Rule Engine library*
 
@@ -67,5 +67,6 @@ MIT License
 [github]: https://github.com/insomnious-melissa/melissa-rule-engine-lfe
 [lfe]: https://github.com/rvirding/lfe
 [lfe badge]: https://img.shields.io/badge/lfe-1.2+-blue.svg
+[erlang]: https://www.erlang.org/downloads
 [erlang badge]: https://img.shields.io/badge/erlang-18+-blue.svg
 [github tags]: https://github.com/insomnious-melissa/melissa-rule-engine-lfe/tags
