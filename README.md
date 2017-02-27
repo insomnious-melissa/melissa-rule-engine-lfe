@@ -1,11 +1,12 @@
-* rule-engine
+rule-engine
+==========
 
-[![LFE Versions][lfe badge]][lfe]
-[![Erlang Versions][erlang badge]][versions]
+![lfe badge]
+![erlang badge]
 
 *LFE Rule Engine library*
 
-Rule Engine is a small subset of LISP aimed to handle user input (S-expessions) returning true if expression evaluates to true, false if it evalues to false or nil if it cannot be evaluated.
+Rule Engine is a small subset of LISP aimed to handle user input (S-expessions) returning true if expression evaluates to true, false if it evalues to false or nil if it cannot be evaluated. It supports handling surrounding context and supposed to be extensible.
 
 More to be done soon!
 
