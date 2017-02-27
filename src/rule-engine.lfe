@@ -158,36 +158,40 @@
                                               (type-quantifier `(any ,predicate ,arguments))))
   ((_unknown _params) 'list))
 
+(defmacro external-function (function-name)
+  `(,function-name (maps:get ',function-name external-functions)))
+
 (defun transform-expression (expression ctx external-functions outer-expression)
-  (let ((ctx-get-in (maps:get 'ctx-get-in external-functions)))
-    (cond
-     ((or (== expression 'true)
-          (== expression 'false))
-      `(quote ,expression))
-     ((== expression 'or) 'orelse)
-     ((== expression 'and) 'andalso)
-     ((== expression 'in) 'lists:member)
-     ((== expression 'any) 'lists:any)
-     ((== expression 'all) 'lists:all)
-     ((== expression 'eq) '==)
-     ((== expression 'gt) '>)
-     ((== expression 'lt) '<)
-     ((== expression 'gte) '>=)
-     ((== expression 'lte) '=<)
-     ((== expression 'count) 'length)
-     ((== expression 'first) 'car)
-     ((andalso (is_list expression)
-               (not (string? expression)))
-      (if (andalso (of-the-same-type? expression)
-                   (string? (car expression)))
-        `(quote ,expression)
-        (lists:map (lambda (inner-expression)
-                     (transform-expression inner-expression
-                                           ctx
-                                           external-functions
-                                           expression))
-                   expression)))
-     ((andalso (is_atom expression)
-               (startswith (atom_to_list expression) "ctx."))
-      (ctx-get-in expression ctx))
-     ('true expression))))
+  (let ((external-function 'ctx-get-in))
+    (maps:get expression #m(or orelse
+                            and andalso
+                            in lists:member
+                            any lists:any
+                            all lists:all
+                            eq ==
+                            gt >
+                            lt <
+                            gte >=
+                            lte =<
+                            count length
+                            first car
+                            second cadr)
+              (cond
+               ((or (== expression 'true)
+                    (== expression 'false))
+                `(quote ,expression))
+               ((andalso (is_list expression)
+                         (not (string? expression)))
+                (if (andalso (of-the-same-type? expression)
+                             (string? (car expression)))
+                  `(quote ,expression)
+                  (lists:map (lambda (inner-expression)
+                               (transform-expression inner-expression
+                                                     ctx
+                                                     external-functions
+                                                     expression))
+                             expression)))
+               ((andalso (is_atom expression)
+                         (startswith (atom_to_list expression) "ctx."))
+                (ctx-get-in expression ctx))
+               ('true expression)))))
