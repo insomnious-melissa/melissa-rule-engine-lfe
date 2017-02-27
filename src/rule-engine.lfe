@@ -110,9 +110,10 @@
   (if (predicate-or-quantifier? expression)
     (let* ((external-functions #m(ctx-get-in #'ctx-get-in/2))
            (transformed-expression `(quote ,(transform-expression expression
-                                                                 ctx
-                                                                 external-functions
-                                                                 ()))))
+                                                                  1
+                                                                  ctx
+                                                                  external-functions
+                                                                  ()))))
       (let ((evaluated-expression `(eval ,transformed-expression)))
         (rule-engine-log "transformed expression ~p~n" evaluated-expression)
         (eval evaluated-expression)))
@@ -161,7 +162,11 @@
 (defmacro external-function (function-name)
   `(,function-name (maps:get ',function-name external-functions)))
 
-(defun transform-expression (expression ctx external-functions outer-expression)
+(defun transform-expression (expression
+                             expression-index
+                             ctx
+                             external-functions
+                             outer-expression)
   (let ((external-function 'ctx-get-in))
     (maps:get expression #m(or orelse
                             and andalso
@@ -185,12 +190,18 @@
                 (if (andalso (of-the-same-type? expression)
                              (string? (car expression)))
                   `(quote ,expression)
-                  (lists:map (lambda (inner-expression)
-                               (transform-expression inner-expression
-                                                     ctx
-                                                     external-functions
-                                                     expression))
-                             expression)))
+                  (lists:map (lambda (inner-expression-and-index)
+                               (let ((inner-expression-index
+                                      (element 1 inner-expression-and-index))
+                                     (inner-expression
+                                      (element 2 inner-expression-and-index)))
+                                 (transform-expression inner-expression
+                                                       inner-expression-index
+                                                       ctx
+                                                       external-functions
+                                                       expression)))
+                             (lists:zip (lists:seq 1 (length expression))
+                                        expression))))
                ((andalso (is_atom expression)
                          (startswith (atom_to_list expression) "ctx."))
                 (ctx-get-in expression ctx))
