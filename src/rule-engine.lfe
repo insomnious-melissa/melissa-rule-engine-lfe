@@ -18,30 +18,70 @@
         (params (cdr args)))
     `(funcall #'io:format/2 (++ "[RE] " ,format) (list ,@params))))
 
-(defmacro bind rule-engine-function-and-host-function
-  (let* ((rule-engine-function (car rule-engine-function-and-host-function))
-         (host-function (cdr rule-engine-function-and-host-function)))
-    `#(,rule-engine-function (lambda (args env)
-                               `(let ((env ,env))
-                                  (,',@host-function ,@args))))))
+(defmacro rule-engine-macro (macro-name)
+  `(defmacro ,macro-name rule-engine-function-and-host-function
+     (let* ((rule-engine-function (car rule-engine-function-and-host-function))
+            (host-function (cadr rule-engine-function-and-host-function)))
+       `#(,rule-engine-function
+          (lambda (rawargs env)
+            (let* ((args (car (list rawargs)))
+                   (arg (car args))
+                   (arg1 arg)
+                   (vars (lfe_env:get_vars env))
+                   (ctx (list `#(args ,args)
+                              `#(arg ,arg)
+                              `#(arg1 ,arg1)
+                              `#(arg2 ,(if (> (length args) 1)
+                                         (car (cdr args))
+                                         ()))
+                              `#(arg3 ,(if (> (length args) 2)
+                                         (car (cdr (cdr args)))
+                                         ()))))
+                   (expanded-ctx (let ((expanded-vars
+                                        (lists:keymap
+                                         (lambda (val)
+                                           (proplists:get_value val
+                                                                (maps:to_list vars)
+                                                                val))
+                                         2
+                                         ctx)))
+                                   (++ expanded-vars
+                                       (lists:filtermap
+                                        (lambda (value)
+                                          (let ((`#(,key ,val) value))
+                                            (if (orelse
+                                                 (lists:member key
+                                                               (++ (list 'true
+                                                                         'false
+                                                                         'macros)
+                                                                   (proplists:get_keys
+                                                                    expanded-vars))))
+                                              'false
+                                              `#(true ,value))))
+                                        (maps:to_list vars)))))
+                   (expanded-arg (proplists:get_value 'arg expanded-ctx arg))
+                   (full-ctx (++ expanded-ctx
+                                 (if (is_list expanded-arg)
+                                   (if (> (length expanded-arg) 0)
+                                     (let* ((quoted
+                                             (eval `(if (== (car (quote ,expanded-arg))
+                                                            'quote)
+                                                      ,expanded-arg
+                                                      (quote ,expanded-arg)))))
+                                       (list `#(quoted ,quoted)
+                                             `#(unquoted ,quoted))))
+                                   ())))
+                   (rules (maps:to_list
+                           (maps:filter (lambda (key val)
+                                          (lists:member key
+                                                        additional-macros))
+                                        (lfe_env:get_funs env)))))
+              (if (== ',',macro-name 'bind)
+                (rule-engine:evaluate '`(,',host-function ,@args) full-ctx rules)
+                (rule-engine:evaluate ',host-function full-ctx rules))))))))
 
-(defmacro rule rule-engine-function-and-body
-  (let* ((rule-engine-function (car rule-engine-function-and-body))
-         (body (cdr rule-engine-function-and-body)))
-    (rule-engine-log "~p ~p~n" rule-engine-function body)
-    `#(,rule-engine-function (lambda (rawargs env)
-                               (let* ((args (car (list rawargs)))
-                                      (arg (car args))
-                                      (arg1 arg)
-                                      (arg2 (if (> (length args) 1)
-                                              (car (cdr args))
-                                              ()))
-                                      (arg3 (if (> (length args) 2)
-                                              (car (cdr (cdr args)))
-                                              ())))
-
-                                 (log "~p ~p~n" (list ',rule-engine-function args))
-                                 ,@body)))))
+(rule-engine-macro bind)
+(rule-engine-macro rule)
 
 ;;; Rule Engine
 
@@ -57,7 +97,7 @@
         (bind first cl:car)
         (bind rest cl:cdr)
         (bind log io:format)
-        (bind length erlang:length)
+        (bind count erlang:length)
         (bind eq erlang:==)
         (bind gt erlang:>)
         (bind lt erlang:<)
@@ -65,17 +105,15 @@
 
 (defun rule-engine-rules ()
   (list (rule identity arg)
-        (rule quoted? `(eq (first ',arg) 'quote))
-        (rule vars (lfe_env:get_vars env))
-        (rule unquote `(if (eq (first ',arg) 'quote)
-                         ,arg
-                         ',arg))
-        (rule apply `(,arg ,@(rest args)))
-        (rule second `(first (rest (unquote ,arg))))
-        (rule third `(first (rest (rest (unquote ,arg)))))
-        (rule bool? `(in ,arg '(true false 'true 'false)))
-        (rule null? `(and (list? ,arg)
-                          (eq (length ,arg) 0)))
+        (rule quoted? (eq (first arg) 'quote))
+        (rule unquote unquoted)
+        (rule second (first (rest quoted)))
+        (rule third (first (rest (rest quoted))))
+        (rule bool? (in arg '(true false
+                              'true 'false
+                              ''true ''false)))
+        (rule null? (and (list? arg)
+                         (eq (count arg) 0)))
         (rule macros? (in arg macros))
         (rule any `(or ,@(lc ((<- val arg2))
                            `(,arg1 ,val))))
@@ -100,9 +138,12 @@
          (env-with-variables (lfe_env:add_vbindings
                               (++ (list #(true true)
                                         #(false false)
-                                        `#(macros ,(proplists:get_keys rule-engine)))
+                                   `#(macros ,(proplists:get_keys rule-engine))
+                                   `#(additional-macros ,(proplists:get_keys additional-rules)))
                                   additional-variables)
                               env-with-macros)))
+    (rule-engine-log "eval-vars ~p~n" additional-variables)
+    (rule-engine-log "eval-expr ~p~n" expression)
     (eval expression env-with-variables)))
 
 (defun check (expression)
@@ -112,22 +153,31 @@
   (rule-engine:evaluate `(,validator expression)
                         (list `#(expression ,expression))
                         (list (rule function?
-                                    `(and (list? ,arg)
-                                          (not (string? ,arg))
-                                          (not (null? ,arg))
-                                          (in (first ,arg) macros)))
+                                    (and (list? expression)
+                                         (not (string? expression))
+                                         (not (null? expression))
+                                         (in (first expression) macros)))
 
-                              (rule rboolexpr? `(valid? ,arg 'boolexpr?))
-                              (rule allrboolexpr? `(all rboolexpr? ,arg))
+                              (rule oneargument?
+                                    (and (valid? expression 'function?)
+                                         (eq (count (rest expression)) 1)))
+                              (rule manyarguments?
+                                    (and (valid? expression 'function?)
+                                         (gt (count (rest expression)) 1)))
+
+                              (rule not-statement?
+                                    (and (valid? expression 'oneargument?)
+                                         (eq (first expression) 'not)
+                                         (valid? (second expression) 'boolexpr?)))
+                              (rule and-or-statement?
+                                    (and (valid? expression 'manyarguments?)
+                                         (in (first expression) '(or and))))
 
                               (rule boolexpr?
-                                    `(or (bool? ,arg)
-                                         (and (function? ,arg)
-                                              (or (and (in (first ,arg) '(or and))
-                                                       (gt (length (rest ,arg)) 1))
-                                                  (and (eq (first ,arg) 'not)
-                                                       (eq (length (rest ,arg)) 1)
-                                                       (rboolexpr? (first (rest ,arg))))))))
+                                    (or (bool? expression)
+                                        (and (valid? expression 'function?)
+                                             (or (valid? expression 'and-or-statement?)
+                                                 (valid? expression 'not-statement?)))))
 
                               (rule expr?
-                                    `(boolexpr? ,arg)))))
+                                    (valid? expression 'boolexpr?)))))
