@@ -21,26 +21,24 @@ Using LFE:
 ```lfe
 ;; Check if S-expression conforms Rule Engine
 
-(== (rule-engine:check '(or true false)) 'predicate)
-(== (rule-engine:check '(in true or)) 'false)
+(== (rule-engine:check '(or true false) 'boolexpr?) 'true)
+(== (rule-engine:check '(in true or) 'expr?) 'false)
 
 ;; Evaluate S-expression using Rule Engine
 (== (rule-engine:evaluate '(or true false)) 'true)
 (== (rule-engine:evaluate '(and true false (in 3 (1 2 3)) 'false)))
-(== (rule-engine:evaluate '(and true false or)) 'nil)
 ```
 
 The same using Erlang:
 
 ```erlang
 % Check if S-expression conforms Rule Engine
-'rule-engine':check(['or','true','false']) == predicate.
-'rule-engine':check(['in','true','or']) == false.
+'rule-engine':check(['or','true','false'], 'boolexpr?') == true.
+'rule-engine':check(['in','true','or'], 'expr?') == false.
 
 % Evaluate S-expression using Rule Engine
 'rule-engine':evaluate(['or','true','false']) == true.
 'rule-engine':evaluate(['and','true','false',['in',3,[1,2,3]]]) == false.
-'rule-engine':evaluate(['and','true','false','or']) == nil.
 ```
 
 ## Build
